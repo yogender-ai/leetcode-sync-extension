@@ -68,6 +68,29 @@
     return (v || v === 0) ? Number(v).toFixed(1) : null;
   }
 
+  // LeetCode judge verdicts. Anything not listed here (notably 16, which is
+  // what you get back while the judge is still running) means "no verdict
+  // yet" and has to be polled again rather than treated as a rejection.
+  const STATUS_NAMES = {
+    10: "Accepted",
+    11: "Wrong Answer",
+    12: "Memory Limit Exceeded",
+    13: "Output Limit Exceeded",
+    14: "Time Limit Exceeded",
+    15: "Runtime Error",
+    20: "Compile Error",
+    21: "Unknown Error",
+    30: "Timeout"
+  };
+
+  function isTerminal(statusCode) {
+    return Object.prototype.hasOwnProperty.call(STATUS_NAMES, Number(statusCode));
+  }
+
+  function statusName(statusCode) {
+    return STATUS_NAMES[Number(statusCode)] || ("still judging (code " + statusCode + ")");
+  }
+
   /** The single gate every detector has to pass. */
   function isAccepted(o) {
     if (Number(o.statusCode) !== 10) return false;
@@ -247,14 +270,34 @@
       }
 
       if (/\/graphql/.test(url)) {
+        // LeetCode polls its own submissionDetails query. The response often
+        // omits code, so take the id from the request variables and fall back
+        // to our own lookup for anything the response is missing.
+        let askedFor = null;
+        try { askedFor = JSON.parse(config.body); } catch (e) {}
+        const askedId = askedFor && askedFor.variables && askedFor.variables.submissionId;
+
         response.clone().json().then(function (d) {
           const sd = d && d.data && d.data.submissionDetails;
-          if (!sd || !sd.code || !sd.code.trim()) return;
-          const sid = String(sd.id || submissionIdFromPath() || "");
+          if (!sd) return;
+          const sid = String(sd.id || askedId || submissionIdFromPath() || "");
           if (!sid || fired.has(sid)) return;
-          log("graphql submissionDetails for", sid, "-> statusCode", sd.statusCode);
+          if (!isTerminal(sd.statusCode)) return; // still judging
+          log("graphql verdict for", sid, "->", statusName(sd.statusCode));
           if (!isAccepted({ statusCode: sd.statusCode, totalCorrect: sd.totalCorrect, totalTestcases: sd.totalTestcases })) return;
-          emit(payloadFromDetails(sid, sd));
+
+          if (sd.code && sd.code.trim()) {
+            emit(payloadFromDetails(sid, sd));
+            return;
+          }
+          const meta = submitRegistry.get(sid);
+          if (meta && meta.code) {
+            emit(Object.assign({}, payloadFromDetails(sid, sd), { code: meta.code, slug: meta.slug, lang: meta.lang }));
+            return;
+          }
+          fetchSubmissionDetails(sid).then(function (full) {
+            if (full && full.code) emit(payloadFromDetails(sid, full));
+          }).catch(function () {});
         }).catch(function () {});
       }
     } catch (e) {
@@ -362,15 +405,35 @@
   // LeetCode says is less than 3 minutes old, or one that followed a submit we
   // watched go out. Browsing your own submission history stays safe.
   const RECENT_WINDOW_MS = 3 * 60 * 1000;
+  const POLL_INTERVAL_MS = 1500;
+  const MAX_POLLS = 40; // ~60s, comfortably longer than any judge run
 
-  function inspectCurrentUrl() {
-    const sid = submissionIdFromPath();
-    if (!sid || fired.has(sid) || inspected.has(sid)) return;
-    inspected.add(sid);
+  /**
+   * Poll one submission until the judge returns a real verdict. Checking once
+   * is not enough: right after a submit LeetCode answers with a non-terminal
+   * status while it is still running your code.
+   */
+  function pollSubmission(sid, attempt) {
+    if (fired.has(sid)) return;
 
     fetchSubmissionDetails(sid).then(function (sd) {
-      if (!sd) return;
-      log("url watcher saw submission", sid, "-> statusCode", sd.statusCode,
+      if (!sd) {
+        if (attempt < MAX_POLLS) setTimeout(function () { pollSubmission(sid, attempt + 1); }, POLL_INTERVAL_MS);
+        return;
+      }
+
+      if (!isTerminal(sd.statusCode)) {
+        if (attempt < MAX_POLLS) {
+          if (attempt === 0) log("submission", sid, "is", statusName(sd.statusCode) + " - waiting for the verdict");
+          setTimeout(function () { pollSubmission(sid, attempt + 1); }, POLL_INTERVAL_MS);
+        } else {
+          warn("gave up waiting for a verdict on", sid, "- last status", sd.statusCode);
+          inspected.delete(sid); // a later navigation may retry
+        }
+        return;
+      }
+
+      log("verdict for", sid, "->", statusName(sd.statusCode),
         (sd.question && sd.question.titleSlug) || "");
 
       if (!isAccepted({ statusCode: sd.statusCode, totalCorrect: sd.totalCorrect, totalTestcases: sd.totalTestcases })) {
@@ -388,8 +451,17 @@
       emit(payloadFromDetails(sid, sd));
     }).catch(function (e) {
       warn("GraphQL lookup failed for", sid, e);
-      inspected.delete(sid); // let the next tick retry
+      if (attempt < MAX_POLLS) setTimeout(function () { pollSubmission(sid, attempt + 1); }, POLL_INTERVAL_MS);
+      else inspected.delete(sid);
     });
+  }
+
+  function inspectCurrentUrl() {
+    const sid = submissionIdFromPath();
+    if (!sid || fired.has(sid) || inspected.has(sid)) return;
+    inspected.add(sid);
+    log("url watcher picked up submission", sid);
+    pollSubmission(sid, 0);
   }
 
   let lastPath = "";
