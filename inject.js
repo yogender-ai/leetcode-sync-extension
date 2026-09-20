@@ -19,6 +19,10 @@
  */
 
 (function () {
+  // Bump this together with manifest.json. It is printed on load and exposed
+  // on __lcSync.state so a stale content script can be spotted instantly.
+  const VERSION = "1.2.2";
+
   if (window.__LEETCODE_SYNC_INJECTED__) return;
   window.__LEETCODE_SYNC_INJECTED__ = true;
 
@@ -413,19 +417,19 @@
    * is not enough: right after a submit LeetCode answers with a non-terminal
    * status while it is still running your code.
    */
-  function pollSubmission(sid, attempt) {
-    if (fired.has(sid)) return;
+  function pollSubmission(sid, attempt, force) {
+    if (fired.has(sid) && !force) return;
 
     fetchSubmissionDetails(sid).then(function (sd) {
       if (!sd) {
-        if (attempt < MAX_POLLS) setTimeout(function () { pollSubmission(sid, attempt + 1); }, POLL_INTERVAL_MS);
+        if (attempt < MAX_POLLS) setTimeout(function () { pollSubmission(sid, attempt + 1, force); }, POLL_INTERVAL_MS);
         return;
       }
 
       if (!isTerminal(sd.statusCode)) {
         if (attempt < MAX_POLLS) {
           if (attempt === 0) log("submission", sid, "is", statusName(sd.statusCode) + " - waiting for the verdict");
-          setTimeout(function () { pollSubmission(sid, attempt + 1); }, POLL_INTERVAL_MS);
+          setTimeout(function () { pollSubmission(sid, attempt + 1, force); }, POLL_INTERVAL_MS);
         } else {
           warn("gave up waiting for a verdict on", sid, "- last status", sd.statusCode);
           inspected.delete(sid); // a later navigation may retry
@@ -443,15 +447,17 @@
 
       const ageMs = sd.timestamp ? Date.now() - Number(sd.timestamp) * 1000 : null;
       const followsOurSubmit = (Date.now() - lastSubmitAt) < RECENT_WINDOW_MS;
-      if (ageMs !== null && ageMs > RECENT_WINDOW_MS && !followsOurSubmit) {
+      if (!force && ageMs !== null && ageMs > RECENT_WINDOW_MS && !followsOurSubmit) {
         log("submission is", Math.round(ageMs / 1000), "s old - treating as history browsing, not syncing");
+        log("run __lcSync.syncNow() if you do want to push this one");
         return;
       }
 
+      if (force) fired.delete(sid);
       emit(payloadFromDetails(sid, sd));
     }).catch(function (e) {
       warn("GraphQL lookup failed for", sid, e);
-      if (attempt < MAX_POLLS) setTimeout(function () { pollSubmission(sid, attempt + 1); }, POLL_INTERVAL_MS);
+      if (attempt < MAX_POLLS) setTimeout(function () { pollSubmission(sid, attempt + 1, force); }, POLL_INTERVAL_MS);
       else inspected.delete(sid);
     });
   }
@@ -485,8 +491,10 @@
 
   // ------------------------- Console diagnostics -------------------------
   window.__lcSync = {
+    version: VERSION,
     get state() {
       return {
+        version: VERSION,
         debug: DEBUG,
         fetchHooked: window.fetch !== originalFetch,
         currentSlug: slugFromPath(),
@@ -504,9 +512,23 @@
       if (sid) { inspected.delete(sid); fired.delete(sid); }
       return tick();
     },
+    /**
+     * Push the submission in the current URL right now, ignoring both the
+     * already-synced guard and the "too old to be a fresh submit" window.
+     * Useful when a submission was accepted but the sync did not run.
+     * It still refuses anything LeetCode did not mark Accepted.
+     */
+    syncNow: function (id) {
+      const sid = String(id || submissionIdFromPath() || "");
+      if (!sid) { warn("no submission id in the URL - open the submission first"); return; }
+      log("forcing a sync check for", sid);
+      inspected.delete(sid);
+      fired.delete(sid);
+      pollSubmission(sid, 0, true);
+    },
     /** Raw GraphQL lookup, to eyeball what LeetCode actually returns. */
     lookup: function (id) { return fetchSubmissionDetails(id || submissionIdFromPath()); }
   };
 
-  log("page hook installed (MAIN world, document_start)");
+  log("page hook installed v" + VERSION + " (MAIN world, document_start)");
 })();
