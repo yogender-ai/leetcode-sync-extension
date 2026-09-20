@@ -4,33 +4,40 @@
  */
 
 (function () {
-  console.log("%c[LeetCode-Sync] Content script initialized 🚀", "color: #8b5cf6; font-weight: bold;");
-
   if (window.__LEETCODE_SYNC_CONTENT_LOADED__) return;
   window.__LEETCODE_SYNC_CONTENT_LOADED__ = true;
+
+  console.log("%c[LeetCode-Sync] Content script loaded", "color: #8b5cf6; font-weight: bold;");
+
+  // Helper: check if extension context is still alive
+  function isExtensionAlive() {
+    try {
+      return !!chrome.runtime && !!chrome.runtime.id;
+    } catch (e) {
+      return false;
+    }
+  }
 
   // 1. Inject inject.js into page context (MAIN world)
   try {
     const s = document.createElement("script");
     s.src = chrome.runtime.getURL("inject.js");
-    s.onload = function () {
-      this.remove();
-    };
+    s.onload = function () { this.remove(); };
     (document.head || document.documentElement).appendChild(s);
   } catch (err) {
-    console.error("[LeetCode-Sync] Failed to inject interceptor script:", err);
+    console.error("[LeetCode-Sync] Failed to inject script:", err);
   }
 
   const syncedSubmissions = new Set();
 
   function getHudContainer() {
-    let container = document.getElementById("leetcode-sync-hud-container");
-    if (!container) {
-      container = document.createElement("div");
-      container.id = "leetcode-sync-hud-container";
-      document.body.appendChild(container);
+    let c = document.getElementById("leetcode-sync-hud-container");
+    if (!c) {
+      c = document.createElement("div");
+      c.id = "leetcode-sync-hud-container";
+      document.body.appendChild(c);
     }
-    return container;
+    return c;
   }
 
   function showToast({ title, message, status = "info", link = null, autoDismiss = 7000 }) {
@@ -50,12 +57,10 @@
         <button class="lc-sync-toast-close" title="Dismiss">&times;</button>
       </div>
       <div class="lc-sync-toast-body">${message}</div>
-      ${link ? `<a class="lc-sync-toast-link" href="${link}" target="_blank" rel="noopener noreferrer">View on GitHub ↗</a>` : ""}
-      <div class="lc-sync-toast-progress"></div>
+      ${link ? `<a class="lc-sync-toast-link" href="${link}" target="_blank">View on GitHub ↗</a>` : ""}
     `;
 
-    const closeBtn = toast.querySelector(".lc-sync-toast-close");
-    closeBtn.addEventListener("click", () => {
+    toast.querySelector(".lc-sync-toast-close").addEventListener("click", () => {
       toast.classList.add("lc-sync-toast-fadeout");
       setTimeout(() => toast.remove(), 300);
     });
@@ -72,63 +77,64 @@
     }
 
     return {
-      update: (newOpts) => {
-        if (newOpts.title) toast.querySelector(".lc-sync-toast-title").textContent = newOpts.title;
-        if (newOpts.message) toast.querySelector(".lc-sync-toast-body").textContent = newOpts.message;
-        if (newOpts.status) {
-          toast.className = `lc-sync-toast lc-sync-toast-${newOpts.status}`;
-          const iconElem = toast.querySelector(".lc-sync-toast-icon");
-          if (newOpts.status === "success") iconElem.textContent = "✅";
-          else if (newOpts.status === "error") iconElem.textContent = "❌";
-          else if (newOpts.status === "loading") iconElem.textContent = "🔄";
+      update(opts) {
+        if (opts.title) toast.querySelector(".lc-sync-toast-title").textContent = opts.title;
+        if (opts.message) toast.querySelector(".lc-sync-toast-body").textContent = opts.message;
+        if (opts.status) {
+          toast.className = `lc-sync-toast lc-sync-toast-${opts.status}`;
+          const ic = toast.querySelector(".lc-sync-toast-icon");
+          if (opts.status === "success") ic.textContent = "✅";
+          else if (opts.status === "error") ic.textContent = "❌";
+          else if (opts.status === "loading") ic.textContent = "🔄";
         }
-        if (newOpts.link) {
-          let linkEl = toast.querySelector(".lc-sync-toast-link");
-          if (!linkEl) {
-            linkEl = document.createElement("a");
-            linkEl.className = "lc-sync-toast-link";
-            linkEl.target = "_blank";
-            linkEl.rel = "noopener noreferrer";
-            linkEl.textContent = "View on GitHub ↗";
-            toast.insertBefore(linkEl, toast.querySelector(".lc-sync-toast-progress"));
+        if (opts.link) {
+          let a = toast.querySelector(".lc-sync-toast-link");
+          if (!a) {
+            a = document.createElement("a");
+            a.className = "lc-sync-toast-link";
+            a.target = "_blank";
+            a.textContent = "View on GitHub ↗";
+            toast.appendChild(a);
           }
-          linkEl.href = newOpts.link;
+          a.href = opts.link;
         }
-        if (newOpts.autoDismiss) {
+        if (opts.autoDismiss) {
           setTimeout(() => {
             if (toast.parentElement) {
               toast.classList.add("lc-sync-toast-fadeout");
               setTimeout(() => toast.remove(), 300);
             }
-          }, newOpts.autoDismiss);
+          }, opts.autoDismiss);
         }
       },
-      dismiss: () => {
+      dismiss() {
         toast.classList.add("lc-sync-toast-fadeout");
         setTimeout(() => toast.remove(), 300);
       }
     };
   }
 
-  // Handle strictly accepted event from inject.js
+  // Listen for accepted event from inject.js
   document.addEventListener("LEETCODE_SYNC_ACCEPTED", (event) => {
     const detail = event.detail;
-    if (!detail) return;
-
-    // Strict validation
-    if (detail.statusMsg !== "Accepted") return;
-    if (!detail.code || !detail.code.trim()) {
-      console.warn("[LeetCode-Sync] Event ignored: missing code.");
-      return;
-    }
+    if (!detail || detail.statusMsg !== "Accepted") return;
+    if (!detail.code || !detail.code.trim()) return;
 
     const subId = detail.submissionId;
-    if (subId && syncedSubmissions.has(subId)) {
-      console.log(`[LeetCode-Sync] Submission #${subId} already handled.`);
+    if (subId && syncedSubmissions.has(subId)) return;
+    if (subId) syncedSubmissions.add(subId);
+
+    // Check if extension context is still valid (handles reload case)
+    if (!isExtensionAlive()) {
+      console.warn("[LeetCode-Sync] Extension was reloaded. Please refresh this LeetCode tab.");
+      showToast({
+        title: "Extension Reloaded",
+        message: "Please refresh this page (F5) to reconnect the sync.",
+        status: "error",
+        autoDismiss: 10000
+      });
       return;
     }
-
-    if (subId) syncedSubmissions.add(subId);
 
     const toast = showToast({
       title: "LeetCode Auto-Sync",
@@ -137,47 +143,58 @@
       autoDismiss: 0
     });
 
-    chrome.runtime.sendMessage(
-      {
-        action: "SYNC_SUBMISSION",
-        payload: detail
-      },
-      (response) => {
-        if (chrome.runtime.lastError) {
-          console.error("[LeetCode-Sync] Runtime error:", chrome.runtime.lastError);
-          toast.update({
-            title: "Sync Failed",
-            message: `Extension background disconnected: ${chrome.runtime.lastError.message}`,
-            status: "error",
-            autoDismiss: 8000
-          });
-          return;
-        }
+    try {
+      chrome.runtime.sendMessage(
+        { action: "SYNC_SUBMISSION", payload: detail },
+        (response) => {
+          if (chrome.runtime.lastError) {
+            toast.update({
+              title: "Sync Failed",
+              message: "Extension disconnected. Refresh this page (F5) and resubmit.",
+              status: "error",
+              autoDismiss: 8000
+            });
+            return;
+          }
 
-        if (response && response.success) {
-          toast.update({
-            title: "Pushed to GitHub! 🚀",
-            message: `Committed to ${response.repo}/${response.path} · +${response.xp || 25} EXP!`,
-            status: "success",
-            link: response.commitUrl || response.fileUrl,
-            autoDismiss: 8000
-          });
-        } else {
-          toast.update({
-            title: "Sync Skipped",
-            message: response ? response.error : "Could not sync solution.",
-            status: "error",
-            autoDismiss: 8000
-          });
+          if (response && response.success) {
+            toast.update({
+              title: "Pushed to GitHub! 🚀",
+              message: `${response.repo}/${response.path} · +${response.xp || 25} EXP!`,
+              status: "success",
+              link: response.commitUrl || response.fileUrl,
+              autoDismiss: 8000
+            });
+          } else {
+            toast.update({
+              title: "Sync Failed",
+              message: response ? response.error : "Unknown error.",
+              status: "error",
+              autoDismiss: 8000
+            });
+          }
         }
-      }
-    );
-  });
-
-  chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    if (request.action === "GET_CURRENT_PROBLEM_SLUG") {
-      const match = window.location.pathname.match(/\/problems\/([^/]+)/);
-      sendResponse({ slug: match ? match[1] : null });
+      );
+    } catch (err) {
+      // Extension context invalidated — show friendly message
+      toast.update({
+        title: "Extension Reloaded",
+        message: "Refresh this page (F5) to reconnect, then resubmit.",
+        status: "error",
+        autoDismiss: 10000
+      });
     }
   });
+
+  // Respond to popup slug queries
+  try {
+    chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+      if (request.action === "GET_CURRENT_PROBLEM_SLUG") {
+        const match = window.location.pathname.match(/\/problems\/([^/]+)/);
+        sendResponse({ slug: match ? match[1] : null });
+      }
+    });
+  } catch (e) {
+    // Extension context already gone — ignore
+  }
 })();
