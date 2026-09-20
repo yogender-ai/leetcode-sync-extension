@@ -1,16 +1,11 @@
 /**
  * LeetCode GitHub Auto-Sync - Content Script
  * Runs on leetcode.com/problems/* in ISOLATED world.
- * - Injects inject.js into the main DOM
- * - Listens for accepted submissions
- * - Communicates with background service worker
- * - Renders a cyberpunk gamer notification toast and HUD
  */
 
 (function () {
   console.log("%c[LeetCode-Sync] Content script initialized 🚀", "color: #8b5cf6; font-weight: bold;");
 
-  // Prevent multiple injections
   if (window.__LEETCODE_SYNC_CONTENT_LOADED__) return;
   window.__LEETCODE_SYNC_CONTENT_LOADED__ = true;
 
@@ -26,10 +21,8 @@
     console.error("[LeetCode-Sync] Failed to inject interceptor script:", err);
   }
 
-  // Deduplication cache
   const syncedSubmissions = new Set();
 
-  // Create or get HUD container
   function getHudContainer() {
     let container = document.getElementById("leetcode-sync-hud-container");
     if (!container) {
@@ -40,7 +33,6 @@
     return container;
   }
 
-  // Show rich interactive toast
   function showToast({ title, message, status = "info", link = null, autoDismiss = 7000 }) {
     const container = getHudContainer();
     const toast = document.createElement("div");
@@ -118,10 +110,17 @@
     };
   }
 
-  // Handle accepted event from inject.js
+  // Handle strictly accepted event from inject.js
   document.addEventListener("LEETCODE_SYNC_ACCEPTED", (event) => {
     const detail = event.detail;
     if (!detail) return;
+
+    // Strict validation
+    if (detail.statusMsg !== "Accepted") return;
+    if (!detail.code || !detail.code.trim()) {
+      console.warn("[LeetCode-Sync] Event ignored: missing code.");
+      return;
+    }
 
     const subId = detail.submissionId;
     if (subId && syncedSubmissions.has(subId)) {
@@ -165,17 +164,16 @@
           });
         } else {
           toast.update({
-            title: "Sync Skipped / Failed",
-            message: response ? response.error : "Unknown sync error. Check extension settings.",
+            title: "Sync Skipped",
+            message: response ? response.error : "Could not sync solution.",
             status: "error",
-            autoDismiss: 10000
+            autoDismiss: 8000
           });
         }
       }
     );
   });
 
-  // Also check for manual sync trigger requests from popup
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === "GET_CURRENT_PROBLEM_SLUG") {
       const match = window.location.pathname.match(/\/problems\/([^/]+)/);

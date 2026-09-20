@@ -259,6 +259,21 @@ async function handleSyncSubmission(payload) {
   const showNotifications = syncStorage.showNotifications !== false;
   const syncProfile = syncStorage.syncProfile !== false;
 
+  // Reject non-Accepted, empty, or partial submissions
+  if (!payload || payload.statusMsg !== "Accepted") {
+    return { success: false, error: "Submission status is not Accepted." };
+  }
+
+  if (!payload.code || !payload.code.trim()) {
+    return { success: false, error: "Empty code payload. Submission rejected." };
+  }
+
+  if (typeof payload.total_correct === "number" && typeof payload.total_testcases === "number") {
+    if (payload.total_testcases === 0 || payload.total_correct !== payload.total_testcases) {
+      return { success: false, error: `Only ${payload.total_correct}/${payload.total_testcases} testcases passed.` };
+    }
+  }
+
   // Resolve slug
   const slug = payload.slug;
   if (!slug) {
