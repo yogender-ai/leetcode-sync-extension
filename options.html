@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LeetCode Auto-Sync Settings</title>
+  <link rel="stylesheet" href="popup.css">
+  <style>
+    body {
+      width: 100vw;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      padding: 40px 20px;
+      background: #05060f;
+    }
+    .options-container {
+      width: 100%;
+      max-width: 580px;
+      background: #0b0d1a;
+      border: 1px solid #1e1b4b;
+      border-radius: 14px;
+      padding: 28px;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    .settings-panel {
+      border: none;
+      padding: 0;
+      background: transparent;
+    }
+  </style>
+</head>
+<body>
+  <div class="options-container">
+    <header class="header">
+      <div class="logo-group">
+        <img src="icons/icon48.png" alt="Logo" class="app-icon">
+        <div>
+          <h1 class="app-title" style="font-size: 20px;">LeetCode GitHub Auto-Sync</h1>
+          <span class="app-tagline">Extension Preferences & Configuration</span>
+        </div>
+      </div>
+      <div id="status-badge" class="badge badge-disconnected">
+        <span class="badge-dot"></span>
+        <span class="badge-text">Setup Needed</span>
+      </div>
+    </header>
+
+    <div id="profile-card" class="card profile-card hidden">
+      <img id="user-avatar" class="user-avatar" src="icons/icon48.png" alt="Avatar">
+      <div class="user-info">
+        <div class="user-name-row">
+          <span id="user-login" class="user-login" style="font-size: 16px;">@username</span>
+          <span class="rank-tag">Grandmaster</span>
+        </div>
+        <div class="repo-row">
+          <span class="repo-label">Target Solution Repo:</span>
+          <a id="repo-link" class="repo-link" href="#" target="_blank">DSA-LeetCode-Journey</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="settings-panel">
+      <div class="form-group">
+        <label for="github-token">GitHub Personal Access Token (PAT)</label>
+        <div class="input-with-action">
+          <input type="password" id="github-token" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" autocomplete="off">
+          <button id="toggle-token-visibility" type="button" class="btn-sm">👁️</button>
+        </div>
+        <div class="help-text">
+          Generate a classic token with <code>repo</code> scope: <a href="https://github.com/settings/tokens/new?scopes=repo&description=LeetCode+Sync+Extension" target="_blank">Create Token on GitHub ↗</a>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="target-repo">Target Solution Repository</label>
+        <input type="text" id="target-repo" value="yogender-ai/DSA-LeetCode-Journey" placeholder="owner/repo">
+        <div class="help-text">Solutions will be saved into <code>YYYY/MM-Month/DD-MM-YY/num-slug.ext</code></div>
+      </div>
+
+      <div class="form-group">
+        <label for="target-branch">Target Branch</label>
+        <input type="text" id="target-branch" value="main" placeholder="main">
+      </div>
+
+      <div class="form-group">
+        <label for="profile-repo">Profile Repository (Live Updates)</label>
+        <input type="text" id="profile-repo" value="yogender-ai/yogender-ai" placeholder="owner/profile-repo">
+        <div class="help-text">Triggers <code>sync_leetcode.yml</code> workflow upon submission to refresh profile badges & SVGs.</div>
+      </div>
+
+      <div class="toggles-group" style="padding: 12px 0;">
+        <label class="toggle-label">
+          <span>Auto-sync automatically on Accepted submission</span>
+          <input type="checkbox" id="toggle-autosync" checked>
+          <span class="toggle-slider"></span>
+        </label>
+        <label class="toggle-label">
+          <span>Show desktop notifications on sync</span>
+          <input type="checkbox" id="toggle-notifications" checked>
+          <span class="toggle-slider"></span>
+        </label>
+        <label class="toggle-label">
+          <span>Trigger profile repository workflow live</span>
+          <input type="checkbox" id="toggle-profile" checked>
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+
+      <button id="save-btn" class="btn btn-primary w-full" style="padding: 11px;">
+        <span class="btn-text">Save & Verify Connection</span>
+      </button>
+
+      <div id="feedback-msg" class="feedback-msg hidden" style="margin-top: 10px;"></div>
+    </div>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>

@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LeetCode Auto-Sync</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="header">
+      <div class="logo-group">
+        <img src="icons/icon48.png" alt="Logo" class="app-icon">
+        <div>
+          <h1 class="app-title">LeetCode Sync</h1>
+          <span class="app-tagline">Gamer RPG Edition</span>
+        </div>
+      </div>
+      <div id="status-badge" class="badge badge-disconnected">
+        <span class="badge-dot"></span>
+        <span class="badge-text">Setup Needed</span>
+      </div>
+    </header>
+
+    <!-- User Profile Card (Shown when connected) -->
+    <div id="profile-card" class="card profile-card hidden">
+      <img id="user-avatar" class="user-avatar" src="icons/icon48.png" alt="Avatar">
+      <div class="user-info">
+        <div class="user-name-row">
+          <span id="user-login" class="user-login">@username</span>
+          <span class="rank-tag">Grandmaster</span>
+        </div>
+        <div class="repo-row">
+          <span class="repo-label">Target:</span>
+          <a id="repo-link" class="repo-link" href="#" target="_blank">DSA-LeetCode-Journey</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Quick Stats HUD -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <span class="stat-label">TODAY'S EXP</span>
+        <span id="stat-xp" class="stat-value text-lime">+0 XP</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">AUTO-SYNC</span>
+        <span id="stat-auto" class="stat-value text-cyan">ACTIVE</span>
+      </div>
+    </div>
+
+    <!-- Configuration Form / Settings -->
+    <div class="section-container">
+      <div class="section-header">
+        <span class="section-title">GitHub Connection</span>
+        <button id="toggle-settings-btn" class="icon-button" title="Toggle Configuration">⚙️</button>
+      </div>
+
+      <div id="settings-panel" class="settings-panel">
+        <div class="form-group">
+          <label for="github-token">GitHub Token (PAT)</label>
+          <div class="input-with-action">
+            <input type="password" id="github-token" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" autocomplete="off">
+            <button id="toggle-token-visibility" type="button" class="btn-sm">👁️</button>
+          </div>
+          <div class="help-text">
+            Need a token? <a id="token-link" href="https://github.com/settings/tokens/new?scopes=repo&description=LeetCode+Sync+Extension" target="_blank">Generate 1-click token</a> (with <code>repo</code> scope)
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="target-repo">Target Solution Repo</label>
+          <input type="text" id="target-repo" value="yogender-ai/DSA-LeetCode-Journey" placeholder="owner/repo">
+        </div>
+
+        <div class="form-group">
+          <label for="target-branch">Target Branch</label>
+          <input type="text" id="target-branch" value="main" placeholder="main">
+        </div>
+
+        <div class="form-group">
+          <label for="profile-repo">Profile Repo (Live Updates)</label>
+          <input type="text" id="profile-repo" value="yogender-ai/yogender-ai" placeholder="owner/profile-repo">
+        </div>
+
+        <div class="toggles-group">
+          <label class="toggle-label">
+            <span>Auto-sync on Accepted</span>
+            <input type="checkbox" id="toggle-autosync" checked>
+            <span class="toggle-slider"></span>
+          </label>
+          <label class="toggle-label">
+            <span>Desktop Notifications</span>
+            <input type="checkbox" id="toggle-notifications" checked>
+            <span class="toggle-slider"></span>
+          </label>
+          <label class="toggle-label">
+            <span>Trigger Profile Action</span>
+            <input type="checkbox" id="toggle-profile" checked>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <button id="save-btn" class="btn btn-primary w-full">
+          <span class="btn-text">Save & Test Connection</span>
+        </button>
+
+        <div id="feedback-msg" class="feedback-msg hidden"></div>
+      </div>
+    </div>
+
+    <!-- Recent Synced Activity -->
+    <div class="section-container">
+      <div class="section-header">
+        <span class="section-title">Recent Activity</span>
+        <span id="sync-count" class="badge-pill">0 Synced</span>
+      </div>
+      <div id="activity-list" class="activity-list">
+        <div class="empty-state">No submissions synced yet.<br>Solve a problem on LeetCode to test!</div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <span>Auto-commits to <code>dates/</code> & updates README live</span>
+    </footer>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
