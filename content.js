@@ -18,15 +18,7 @@
     }
   }
 
-  // 1. Inject inject.js into page context (MAIN world)
-  try {
-    const s = document.createElement("script");
-    s.src = chrome.runtime.getURL("inject.js");
-    s.onload = function () { this.remove(); };
-    (document.head || document.documentElement).appendChild(s);
-  } catch (err) {
-    console.error("[LeetCode-Sync] Failed to inject script:", err);
-  }
+  // inject.js runs automatically via manifest (world: "MAIN", run_at: "document_start")
 
   const syncedSubmissions = new Set();
 
