@@ -7,7 +7,10 @@
   if (window.__LEETCODE_SYNC_CONTENT_LOADED__) return;
   window.__LEETCODE_SYNC_CONTENT_LOADED__ = true;
 
-  console.log("%c[LeetCode-Sync] Content script loaded", "color: #8b5cf6; font-weight: bold;");
+  // Version is logged so you can confirm at a glance that a reload took effect.
+  let version = "?";
+  try { version = chrome.runtime.getManifest().version; } catch (e) {}
+  console.log(`%c[LeetCode-Sync] Content script loaded (v${version})`, "color: #8b5cf6; font-weight: bold;");
 
   // Helper: check if extension context is still alive
   function isExtensionAlive() {
@@ -109,12 +112,23 @@
   // Listen for accepted event from inject.js
   document.addEventListener("LEETCODE_SYNC_ACCEPTED", (event) => {
     const detail = event.detail;
-    if (!detail || detail.statusMsg !== "Accepted") return;
-    if (!detail.code || !detail.code.trim()) return;
+    if (!detail || detail.statusMsg !== "Accepted") {
+      console.log("[LeetCode-Sync] ignoring non-accepted event");
+      return;
+    }
+    if (!detail.code || !detail.code.trim()) {
+      console.warn("[LeetCode-Sync] ignoring event with empty code");
+      return;
+    }
 
     const subId = detail.submissionId;
     if (subId && syncedSubmissions.has(subId)) return;
     if (subId) syncedSubmissions.add(subId);
+
+    console.log("[LeetCode-Sync] relaying submission", subId, detail.slug, "to background");
+
+    // A failed push should be retryable, so release the id unless it lands.
+    const releaseOnFailure = () => { if (subId) syncedSubmissions.delete(subId); };
 
     // Check if extension context is still valid (handles reload case)
     if (!isExtensionAlive()) {
@@ -140,6 +154,8 @@
         { action: "SYNC_SUBMISSION", payload: detail },
         (response) => {
           if (chrome.runtime.lastError) {
+            releaseOnFailure();
+            console.warn("[LeetCode-Sync] background unreachable:", chrome.runtime.lastError.message);
             toast.update({
               title: "Sync Failed",
               message: "Extension disconnected. Refresh this page (F5) and resubmit.",
@@ -158,6 +174,8 @@
               autoDismiss: 8000
             });
           } else {
+            releaseOnFailure();
+            console.warn("[LeetCode-Sync] sync failed:", response && response.error);
             toast.update({
               title: "Sync Failed",
               message: response ? response.error : "Unknown error.",
@@ -169,6 +187,7 @@
       );
     } catch (err) {
       // Extension context invalidated — show friendly message
+      releaseOnFailure();
       toast.update({
         title: "Extension Reloaded",
         message: "Refresh this page (F5) to reconnect, then resubmit.",

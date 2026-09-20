@@ -268,9 +268,13 @@ async function handleSyncSubmission(payload) {
     return { success: false, error: "Empty code payload. Submission rejected." };
   }
 
-  if (typeof payload.total_correct === "number" && typeof payload.total_testcases === "number") {
-    if (payload.total_testcases === 0 || payload.total_correct !== payload.total_testcases) {
-      return { success: false, error: `Only ${payload.total_correct}/${payload.total_testcases} testcases passed.` };
+  // inject.js sends camelCase; accept either spelling so a rename upstream
+  // can never silently disable this guard again.
+  const correct = payload.totalCorrect ?? payload.total_correct;
+  const testcases = payload.totalTestcases ?? payload.total_testcases;
+  if (typeof correct === "number" && typeof testcases === "number") {
+    if (testcases === 0 || correct !== testcases) {
+      return { success: false, error: `Only ${correct}/${testcases} testcases passed.` };
     }
   }
 
@@ -278,6 +282,15 @@ async function handleSyncSubmission(payload) {
   const slug = payload.slug;
   if (!slug) {
     return { success: false, error: "Missing problem slug." };
+  }
+
+  // Never push the same submission twice, even across page reloads.
+  const submissionId = payload.submissionId ? String(payload.submissionId) : null;
+  if (submissionId) {
+    const { pushedSubmissionIds = [] } = await chrome.storage.local.get("pushedSubmissionIds");
+    if (pushedSubmissionIds.includes(submissionId)) {
+      return { success: false, error: "This submission was already synced." };
+    }
   }
 
   // 1. Fetch full Question details
@@ -338,8 +351,15 @@ async function handleSyncSubmission(payload) {
   });
   if (history.length > 30) history.pop();
 
+  const { pushedSubmissionIds = [] } = await chrome.storage.local.get("pushedSubmissionIds");
+  if (submissionId) {
+    pushedSubmissionIds.unshift(submissionId);
+    if (pushedSubmissionIds.length > 200) pushedSubmissionIds.length = 200;
+  }
+
   await chrome.storage.local.set({
     syncHistory: history,
+    pushedSubmissionIds,
     lastSynced: Date.now()
   });
 
