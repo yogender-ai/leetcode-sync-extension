@@ -177,12 +177,17 @@ async function pushToGitHub({ token, repo, branch, filePath, content, commitMess
   };
 
   // Check if file already exists to get SHA
+  const newContentB64 = utf8ToBase64(content);
   let existingSha = null;
   try {
     const checkRes = await fetch(`${baseUrl}?ref=${branch}`, { headers });
     if (checkRes.ok) {
       const checkData = await checkRes.json();
       existingSha = checkData.sha;
+      // Identical content would produce an empty commit, so skip the write.
+      if (checkData.content && checkData.content.replace(/\s/g, "") === newContentB64) {
+        return { unchanged: true };
+      }
     }
   } catch (e) {
     console.warn("[LeetCode-Sync] Error checking existing file SHA:", e);
@@ -314,6 +319,19 @@ async function handleSyncSubmission(payload) {
   const filename = `${paddedNum}-${slug}.${langConf.ext}`;
   const filePath = `${dateInfo.year}/${dateInfo.monthFolder}/${dateInfo.dayFolder}/${filename}`;
 
+  // Re-solving the same problem on the same day lands on the same path, so a
+  // second accepted submission would only produce a redundant commit. Each
+  // attempt has its own submission id, so the id guard above cannot catch it.
+  // __lcSync.syncNow() sets force to push anyway.
+  const dayKey = `${dateInfo.dayFolder}:${slug}`;
+  const { syncedProblemDays = [] } = await chrome.storage.local.get("syncedProblemDays");
+  if (!payload.force && syncedProblemDays.includes(dayKey)) {
+    return {
+      success: false,
+      error: `${num}. ${q.title} was already synced today. Run __lcSync.syncNow() to push it again.`
+    };
+  }
+
   // 4. File content assembly
   const fileContent = buildFileContent(q, payload, langConf, dateInfo, pattern);
 
@@ -327,6 +345,15 @@ async function handleSyncSubmission(payload) {
     content: fileContent,
     commitMessage
   });
+
+  if (pushRes.unchanged) {
+    if (!syncedProblemDays.includes(dayKey)) {
+      syncedProblemDays.unshift(dayKey);
+      if (syncedProblemDays.length > 200) syncedProblemDays.length = 200;
+      await chrome.storage.local.set({ syncedProblemDays });
+    }
+    return { success: false, error: "Already on GitHub with identical content — nothing to commit." };
+  }
 
   // Calculate EXP gained
   const xpMap = { Easy: 10, Medium: 25, Hard: 50 };
@@ -357,9 +384,15 @@ async function handleSyncSubmission(payload) {
     if (pushedSubmissionIds.length > 200) pushedSubmissionIds.length = 200;
   }
 
+  if (!syncedProblemDays.includes(dayKey)) {
+    syncedProblemDays.unshift(dayKey);
+    if (syncedProblemDays.length > 200) syncedProblemDays.length = 200;
+  }
+
   await chrome.storage.local.set({
     syncHistory: history,
     pushedSubmissionIds,
+    syncedProblemDays,
     lastSynced: Date.now()
   });
 

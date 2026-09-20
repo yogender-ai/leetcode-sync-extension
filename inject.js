@@ -21,7 +21,7 @@
 (function () {
   // Bump this together with manifest.json. It is printed on load and exposed
   // on __lcSync.state so a stale content script can be spotted instantly.
-  const VERSION = "1.2.2";
+  const VERSION = "1.3.0";
 
   if (window.__LEETCODE_SYNC_INJECTED__) return;
   window.__LEETCODE_SYNC_INJECTED__ = true;
@@ -454,7 +454,10 @@
       }
 
       if (force) fired.delete(sid);
-      emit(payloadFromDetails(sid, sd));
+      const payload = payloadFromDetails(sid, sd);
+      // Lets the background skip its "already synced today" guard.
+      if (force) payload.force = true;
+      emit(payload);
     }).catch(function (e) {
       warn("GraphQL lookup failed for", sid, e);
       if (attempt < MAX_POLLS) setTimeout(function () { pollSubmission(sid, attempt + 1, force); }, POLL_INTERVAL_MS);
